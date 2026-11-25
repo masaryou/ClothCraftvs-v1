@@ -143,6 +143,33 @@ pub(super) fn mirror(
             reflect_trim(&mut trim);
             t.trims.push(trim);
         }
+        let measurements: Vec<_> = t
+            .measurements
+            .iter()
+            .filter(|measurement| measurement.from.panel_id == id)
+            .cloned()
+            .collect();
+        let mut used_measurement_ids: std::collections::BTreeSet<_> = t
+            .measurements
+            .iter()
+            .map(|measurement| measurement.id.clone())
+            .collect();
+        let mut next_measurement_id = 1usize;
+        for mut measurement in measurements {
+            loop {
+                let candidate = format!("measurement_{next_measurement_id}");
+                next_measurement_id += 1;
+                if used_measurement_ids.insert(candidate.clone()) {
+                    measurement.id = candidate;
+                    break;
+                }
+            }
+            measurement.from.panel_id = new_id.clone();
+            measurement.to.panel_id = new_id.clone();
+            measurement.from.fraction = 1.0 - measurement.from.fraction;
+            measurement.to.fraction = 1.0 - measurement.to.fraction;
+            t.measurements.push(measurement);
+        }
         Ok(new_id)
     } else {
         for s in &mut t.seams {
@@ -155,6 +182,14 @@ pub(super) fn mirror(
         }
         for trim in t.trims.iter_mut().filter(|trim| trim.panel_id == id) {
             reflect_trim(trim);
+        }
+        for measurement in t
+            .measurements
+            .iter_mut()
+            .filter(|measurement| measurement.from.panel_id == id)
+        {
+            measurement.from.fraction = 1.0 - measurement.from.fraction;
+            measurement.to.fraction = 1.0 - measurement.to.fraction;
         }
         t.panels[index] = p;
         Ok(id.into())
@@ -186,6 +221,9 @@ pub(super) fn boolean(
         if t.seams
             .iter()
             .any(|s| s.references().any(|r| r.panel == id))
+            || t.measurements
+                .iter()
+                .any(|measurement| measurement.from.panel_id == id)
             || !p.pins.is_empty()
             || !p.pin_points.is_empty()
             || p.polygon.as_ref().is_some_and(|p| {
@@ -195,7 +233,7 @@ pub(super) fn boolean(
                     || !p.notches.is_empty()
             })
         {
-            return Err("Boolean operands must have no seams, pins, internal lines, target lengths, seam allowances or notches; clear those relations first".into());
+            return Err("Boolean operands must have no seams, pins, measurements, internal lines, target lengths, seam allowances or notches; clear those relations first".into());
         }
     }
     let original = t.panels[ai].clone();

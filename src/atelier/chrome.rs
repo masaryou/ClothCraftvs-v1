@@ -402,6 +402,11 @@ impl Atelier {
         let size = rect.size() * ctx.pixels_per_point();
         let optics =
             marvelous_cloth::garment::appearance::bind(&self.project.template, &self.scene.garment);
+        let trim_overlays = if self.clean_view {
+            Vec::new()
+        } else {
+            self.trim_world_overlays()
+        };
         let texture = self.viewport.draw_scene(
             [size.x as u32, size.y as u32],
             &self.camera,
@@ -423,6 +428,7 @@ impl Atelier {
                 } else {
                     &[]
                 },
+                trim_overlays: &trim_overlays,
             },
             self.wire && !self.clean_view,
             self.heat && !self.clean_view,

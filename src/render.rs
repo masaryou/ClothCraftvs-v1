@@ -23,6 +23,7 @@ pub struct DrawModel<'a> {
     pub avatar: Option<&'a SurfaceMesh>,
     pub collider: Option<&'a dyn Collider>,
     pub seams: &'a [CompiledSeam],
+    pub trim_overlays: &'a [[Vec3; 2]],
 }
 const VERTEX_FLOATS: usize = 15;
 
@@ -617,6 +618,7 @@ impl Viewport {
                 avatar: None,
                 collider: p.sphere.as_ref().map(|s| s as &dyn Collider),
                 seams: &[],
+                trim_overlays: &[],
             },
             wire,
             heat,
@@ -642,6 +644,7 @@ impl Viewport {
             avatar,
             collider,
             seams,
+            trim_overlays,
         } = model;
         let device = &self.render_state.device;
         let max = device.limits().max_texture_dimension_2d.min(4096);
@@ -775,6 +778,13 @@ impl Viewport {
                 Some(t.vertices.map(|i| smooth[i])),
                 roughness,
             );
+        }
+        for pair in trim_overlays {
+            let a = pair[0];
+            let b = pair[1];
+            let d = (b - a).cross(Vec3::Z).normalize_or_zero() * 0.0013;
+            triangle([a - d, a + d, b + d], [0.82, 0.45, 0.05], false, None, -1.);
+            triangle([a - d, b + d, b - d], [0.82, 0.45, 0.05], false, None, -1.);
         }
         for seam in seams {
             for side in [1.0, -1.0] {

@@ -5,6 +5,7 @@ use marvelous_cloth::{
     authoring::{self, Command, ConstructionRef, Edit, History, PointConstruction},
     garment::{
         markings::{MAX_ALLOWANCE_M, Notch, NotchKind, polyline_length, validate_notch},
+        measurements::PatternMeasurement,
         meshing::MeshingSettings,
         polygon::PolygonPattern,
         seam::BoundaryRef,
@@ -67,6 +68,11 @@ pub(super) struct AuthoringUi {
     pub width_mm: f64,
     pub height_mm: f64,
     pub numeric_anchor: Option<usize>,
+    pub pattern_measurement_label: String,
+    pub pattern_measurement_id: Option<String>,
+    pub pattern_measurement_dirty: bool,
+    pub trim_draft: super::trims_ui::TrimDraft,
+    pub graphic_draft: super::graphics_ui::GraphicDraft,
     pub anchor_x_mm: f64,
     pub anchor_y_mm: f64,
     /// Boundary the target-length draft belongs to: (panel id, boundary name).
@@ -1342,6 +1348,12 @@ impl Atelier {
         };
         ui.label(&panel.name);
         self.pin_properties(ui, &panel);
+        self.trim_properties(ui, &panel);
+        self.graphics_properties(ui, &panel);
+        self.trim_properties(ui, &panel);
+        self.graphics_properties(ui, &panel);
+        self.trim_properties(ui, &panel);
+        self.graphics_properties(ui, &panel);
         if let Some(fabric) = self
             .project
             .template
@@ -1378,6 +1390,132 @@ impl Atelier {
             panel.pattern.width * 1000.,
             panel.pattern.height * 1000.
         ));
+        ui.separator();
+        ui.strong("Saved pattern measurements");
+        let saved: Vec<_> = self
+            .project
+            .template
+            .measurements
+            .iter()
+            .filter(|item| item.from.panel_id == panel.id)
+            .cloned()
+            .collect();
+        for measurement in &saved {
+            let selected =
+                self.authoring.pattern_measurement_id.as_deref() == Some(measurement.id.as_str());
+            if ui.selectable_label(selected, &measurement.label).clicked() {
+                self.authoring.pattern_measurement_id = Some(measurement.id.clone());
+                self.authoring.pattern_measurement_label = measurement.label.clone();
+                self.authoring.pattern_measurement_dirty = false;
+            }
+        }
+        let label_response = ui.add(
+            egui::TextEdit::singleline(&mut self.authoring.pattern_measurement_label)
+                .hint_text("Measurement label"),
+        );
+        if label_response.changed() {
+            self.authoring.pattern_measurement_dirty = true;
+        }
+        if let Some(id) = self.authoring.pattern_measurement_id.clone()
+            && let Some(mut measurement) = self
+                .project
+                .template
+                .measurements
+                .iter()
+                .find(|item| item.id == id)
+                .cloned()
+        {
+            measurement.label = self.authoring.pattern_measurement_label.trim().to_string();
+            if ui.button("Rename").clicked() && !measurement.label.is_empty() {
+                if self.edit(Command::SetPatternMeasurement {
+                    measurement: measurement.clone(),
+                }) {
+                    self.authoring.pattern_measurement_dirty = false;
+                }
+            }
+            if ui.button("Delete").clicked()
+                && self.edit(Command::RemovePatternMeasurement { id: id.clone() })
+            {
+                self.authoring.pattern_measurement_id = None;
+                self.authoring.pattern_measurement_label.clear();
+                self.authoring.pattern_measurement_dirty = false;
+            }
+        }
+        if ui.button("Cancel measurement draft").clicked()
+            && (self.authoring.pattern_measurement_dirty || self.authoring.measure.has_draft())
+        {
+            self.authoring.measure = Default::default();
+            if let Some(id) = self.authoring.pattern_measurement_id.clone()
+                && let Some(saved) = self
+                    .project
+                    .template
+                    .measurements
+                    .iter()
+                    .find(|item| item.id == id)
+            {
+                self.authoring.pattern_measurement_label = saved.label.clone();
+            } else {
+                self.authoring.pattern_measurement_label.clear();
+            }
+            self.authoring.pattern_measurement_dirty = false;
+            self.authoring.error = None;
+        }
+        if let Some([board_a, board_b]) = self.authoring.measure.segment(None)
+            && let Some(polygon) = panel.polygon.as_ref()
+            && ui.button("Save 2D measurement").clicked()
+        {
+            let label = self.authoring.pattern_measurement_label.trim();
+            if label.is_empty() {
+                self.authoring.error = Some("Enter a measurement label".into());
+                self.status = "Enter a measurement label".into();
+            } else if let Some(index) = self
+                .project
+                .template
+                .panels
+                .iter()
+                .position(|item| item.id == panel.id)
+            {
+                let origin = authoring::layout(&self.project.template, index);
+                let angle = panel.layout_rotation_degrees;
+                let material_a = authoring::rotate_2d(board_a - origin, -angle);
+                let material_b = authoring::rotate_2d(board_b - origin, -angle);
+                match (
+                    super::measure::station_for_point(&panel.id, polygon, material_a),
+                    super::measure::station_for_point(&panel.id, polygon, material_b),
+                ) {
+                    (Ok(from), Ok(to)) => {
+                        let mut number = 1usize;
+                        let id = loop {
+                            let candidate = format!("pom_{number}");
+                            number += 1;
+                            if !self
+                                .project
+                                .template
+                                .measurements
+                                .iter()
+                                .any(|item| item.id == candidate)
+                            {
+                                break candidate;
+                            }
+                        };
+                        let measurement = PatternMeasurement {
+                            id,
+                            label: label.into(),
+                            from,
+                            to,
+                        };
+                        if self.edit(Command::SetPatternMeasurement { measurement }) {
+                            self.authoring.measure = Default::default();
+                            self.authoring.pattern_measurement_dirty = false;
+                        }
+                    }
+                    (Err(error), _) | (_, Err(error)) => {
+                        self.authoring.error = Some(error.clone());
+                        self.status = error;
+                    }
+                }
+            }
+        }
         // Numeric entry stays in a draft until Apply, so one click is exactly one
         // document edit and one history entry. Millimetres convert by division:
         // 400 mm / 1000 is the exact f64 0.4, unlike a 0.001 multiplication.

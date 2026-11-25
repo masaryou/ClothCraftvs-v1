@@ -2484,6 +2484,8 @@ impl Atelier {
         }
         let mut smoke_targets: Vec<(String, egui::Pos2)> = vec![];
         let painter = ui.painter().with_clip_rect(rect);
+        self.paint_trim_overlays(&painter, rect);
+        self.paint_graphic_overlays(&painter, rect);
         // The pattern board is a white drafting sheet; the 3D window has its own
         // studio backdrop, so the two do not share a background colour.
         painter.rect_filled(rect, 0., Color32::from_rgb(0xFA, 0xFA, 0xFB));

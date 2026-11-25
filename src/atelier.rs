@@ -30,6 +30,8 @@ mod edges_3d;
 mod fabrics_ui;
 #[path = "atelier/gizmo.rs"]
 mod gizmo;
+#[path = "atelier/graphics_ui.rs"]
+mod graphics_ui;
 #[path = "atelier/icons.rs"]
 mod icons;
 #[path = "atelier/issue_ui.rs"]
@@ -58,6 +60,8 @@ mod settings;
 mod sewing_ui;
 #[path = "atelier/stage_settings.rs"]
 mod stage_settings;
+#[path = "atelier/trims_ui.rs"]
+mod trims_ui;
 #[cfg(test)]
 #[path = "atelier/ui_preview.rs"]
 mod ui_preview;

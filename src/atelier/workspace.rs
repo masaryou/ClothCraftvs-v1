@@ -125,11 +125,11 @@ impl Atelier {
         ui.collapsing("Files & formats", |ui| {
             ui.label("Import");
             ui.small("ClothCraft project and template JSON");
-            ui.small("Static avatars: OBJ · glTF · GLB");
-            ui.small("Pattern outlines: generic ASCII DXF · physical SVG subsets");
+            ui.small("Static avatars: OBJ · static glTF · static GLB geometry");
+            ui.small("Pattern outlines: generic ASCII DXF · bounded physical SVG subsets");
             ui.label("Export");
-            ui.small("Project and template JSON · garment OBJ · SVG patterns · fiber guides");
-            ui.small("Industrial DXF, GLB export, animated avatars, USD, Alembic, FBX and PDF are not yet supported.");
+            ui.small("Project and template JSON · garment OBJ with local UVs · SVG patterns · fiber guides");
+            ui.small("Not supported: industrial DXF-AAMA/ASTM, MTL round trips, glTF/GLB exports, animated avatars, USD, Alembic, FBX or PDF.");
             ui.separator();
             ui.small("Export folder (files replaced on every export):");
             ui.label(egui::RichText::new(self.output.display().to_string()).small());

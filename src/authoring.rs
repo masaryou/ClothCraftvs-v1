@@ -276,6 +276,12 @@ pub enum Command {
         properties: FabricProperties,
         all_panels: bool,
     },
+    SetPatternMeasurement {
+        measurement: crate::garment::measurements::PatternMeasurement,
+    },
+    RemovePatternMeasurement {
+        id: String,
+    },
 }
 
 pub struct Edit {
@@ -699,6 +705,7 @@ pub fn same_physics(a: &GarmentTemplate, b: &GarmentTemplate) -> bool {
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
+        t.measurements.clear();
         for p in &mut t.panels {
             p.layout_2d = None;
             p.layout_rotation_degrees = 0.;
@@ -733,6 +740,7 @@ pub fn only_appearance_changed(a: &GarmentTemplate, b: &GarmentTemplate) -> bool
     if a.fabric_appearance == b.fabric_appearance
         && a.graphics == b.graphics
         && a.trims == b.trims
+        && a.measurements == b.measurements
         && markings(a) == markings(b)
     {
         return false;
@@ -742,6 +750,7 @@ pub fn only_appearance_changed(a: &GarmentTemplate, b: &GarmentTemplate) -> bool
         t.fabric_appearance.clear();
         t.graphics.clear();
         t.trims.clear();
+        t.measurements.clear();
         for p in &mut t.panels {
             if let Some(polygon) = p.polygon.as_mut() {
                 polygon.seam_allowances.clear();
@@ -1900,6 +1909,30 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                         }
                     }
                 }
+                let left_len = edge_length(polygon, &edge)?;
+                let right_len = edge_length(polygon, &name)?;
+                for measurement in template.measurements.iter_mut() {
+                    for station in [&mut measurement.from, &mut measurement.to] {
+                        if station.panel_id == panel && station.boundary_id == edge {
+                            let along = station.fraction * current;
+                            if along <= at_m {
+                                station.boundary_id = edge.clone();
+                                station.fraction = if left_len > 0.0 {
+                                    along / left_len
+                                } else {
+                                    0.0
+                                };
+                            } else {
+                                station.boundary_id = name.clone();
+                                station.fraction = if right_len > 0.0 {
+                                    (along - at_m) / right_len
+                                } else {
+                                    1.0
+                                };
+                            }
+                        }
+                    }
+                }
                 index + 1
             };
             normalize(p);
@@ -2071,10 +2104,18 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 [&incoming, &outgoing].iter().any(|name| {
                     polygon.seam_allowances.contains_key(*name)
                         || polygon.notches.contains_key(*name)
+                        || template.measurements.iter().any(|measurement| {
+                            [&measurement.from, &measurement.to].iter().any(|station| {
+                                station.panel_id == panel
+                                    && (station.boundary_id == **name
+                                        || station.boundary_id == incoming
+                                        || station.boundary_id == outgoing)
+                            })
+                        })
                 })
             }) {
                 return Err(
-                    "Seam allowances or notches use this point's boundaries; clear them first"
+                    "Measurements, seam allowances or notches use this point's boundaries; clear the references first"
                         .into(),
                 );
             }
@@ -2328,6 +2369,20 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 trim.panel_id = copy.id.clone();
                 template.trims.push(trim);
             }
+            for measurement in source
+                .measurements
+                .iter()
+                .filter(|measurement| measurement.from.panel_id == panel)
+            {
+                let mut measurement = measurement.clone();
+                measurement.id = unused_id(
+                    "measurement",
+                    template.measurements.iter().map(|item| item.id.clone()),
+                );
+                measurement.from.panel_id = copy.id.clone();
+                measurement.to.panel_id = copy.id.clone();
+                template.measurements.push(measurement);
+            }
             selected = Some(copy.id.clone());
             template.panels.push(copy);
         }
@@ -2339,6 +2394,9 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 return Err("Panel not found".into());
             }
             template.panels.retain(|p| p.id != panel);
+            template.measurements.retain(|measurement| {
+                measurement.from.panel_id != panel && measurement.to.panel_id != panel
+            });
             template
                 .seams
                 .retain(|s| s.references().all(|r| r.panel != panel));
@@ -2356,6 +2414,9 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
                 return Err("Keep at least one panel".into());
             }
             template.panels.retain(|p| !ids.contains(&p.id));
+            template.measurements.retain(|measurement| {
+                !ids.contains(&measurement.from.panel_id) && !ids.contains(&measurement.to.panel_id)
+            });
             template
                 .seams
                 .retain(|s| s.references().all(|r| !ids.contains(&r.panel)));
@@ -2522,6 +2583,45 @@ pub fn apply(source: &GarmentTemplate, command: Command) -> Result<Edit, String>
             }
             selected = Some(original.panel_id);
             template.trims.extend(additions);
+        }
+        Command::SetPatternMeasurement { measurement } => {
+            measurement.validate()?;
+            if measurement.from.panel_id != measurement.to.panel_id {
+                return Err("Pattern measurement endpoints must belong to one panel".into());
+            }
+            let panel = template
+                .panels
+                .iter()
+                .find(|panel| panel.id == measurement.from.panel_id)
+                .ok_or("Pattern measurement references a missing panel")?;
+            let polygon = panel
+                .polygon
+                .as_ref()
+                .ok_or("Pattern measurements require polygon geometry")?;
+            measurement.from.point(polygon)?;
+            measurement.to.point(polygon)?;
+            selected = Some(measurement.from.panel_id.clone());
+            if let Some(existing) = template
+                .measurements
+                .iter_mut()
+                .find(|item| item.id == measurement.id)
+            {
+                if *existing == measurement {
+                    return Err("Pattern measurement is unchanged".into());
+                }
+                *existing = measurement;
+            } else {
+                if template.measurements.len() >= 4096 {
+                    return Err("At most 4096 pattern measurements are supported".into());
+                }
+                template.measurements.push(measurement);
+            }
+        }
+        Command::RemovePatternMeasurement { id } => {
+            if !template.measurements.iter().any(|item| item.id == id) {
+                return Err("Pattern measurement not found".into());
+            }
+            template.measurements.retain(|item| item.id != id);
         }
     }
     linked::synchronize(source, &mut template)?;

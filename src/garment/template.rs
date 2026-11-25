@@ -175,6 +175,10 @@ pub struct GarmentTemplate {
     pub pin_targets: Vec<super::pins::MaterialPinTarget>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub frozen_panels: Vec<super::pins::FrozenPanel>,
+    /// Saved single-size pattern measurements, identified by stable panel and
+    /// boundary references. This metadata is excluded from physics and caches.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub measurements: Vec<super::measurements::PatternMeasurement>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -546,6 +550,7 @@ impl GarmentTemplate {
             fabric_appearance: Default::default(),
             graphics: vec![],
             trims: vec![],
+            measurements: vec![],
             fabrics: vec![Fabric {
                 id: "woven-demo".into(),
                 name: "Uncalibrated woven reference".into(),

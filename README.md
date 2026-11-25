@@ -67,11 +67,11 @@ The long-term goal is interchangeable physics behind a stable document and autho
 |---|---|---|
 | Editable garment | ClothCraft project / template JSON | Project / template JSON |
 | Static avatar | OBJ, static glTF / GLB geometry | — |
-| Simulated garment mesh | — | OBJ geometry and material-space UVs |
-| 2D patterns | Selected closed outlines from generic planar ASCII DXF and physically scaled SVG subsets | Annotated SVG preview and millimetre-scale sewing outlines with a 100 mm ruler; no allowances or tiling |
+| Simulated garment mesh | — | OBJ geometry and local metre-space UVs |
+| 2D patterns | Selected closed outlines from generic planar ASCII DXF and bounded, physically scaled SVG subsets | Annotated SVG preview and millimetre-scale sewing outlines with a 100 mm ruler; no allowances or tiling |
 | Research data | — | Metrics, fiber frames and geometric grain guides |
 
-DXF-AAMA/ASTM, MTL round trips, glTF/GLB export, animated avatars, Alembic, USD, FBX, PDF printing and grading rules remain planned. CLO and Marvelous Designer project files are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
+Not supported: industrial DXF-AAMA/ASTM, MTL round trips, glTF/GLB export, animated avatars, USD, Alembic, FBX and PDF. CLO and Marvelous Designer project files are not supported. Save preserves the editable document; Export writes separate interchange artifacts. See the [input/output contracts](docs/interoperability.md).
 
 ## Help build it
 

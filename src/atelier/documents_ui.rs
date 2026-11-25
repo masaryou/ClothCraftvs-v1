@@ -392,6 +392,8 @@ impl Atelier {
             || !self.authoring.ends.is_empty()
             || self.authoring.sewing.sides.iter().any(|s| !s.is_empty())
             || self.authoring.sewing.start.is_some()
+            || self.authoring.pattern_measurement_dirty
+            || self.authoring.measure.has_draft()
     }
     fn pause_document(&mut self, ctx: &egui::Context) {
         self.playing = false;
@@ -407,6 +409,13 @@ impl Atelier {
         project
     }
     fn save_document(&mut self, ctx: &egui::Context, save_as: bool) -> bool {
+        if self.authoring.pattern_measurement_dirty || self.authoring.measure.has_draft() {
+            self.status =
+                "Save or discard the unfinished pattern measurement before saving the document"
+                    .into();
+            self.authoring.error = Some(self.status.clone());
+            return false;
+        }
         self.pause_document(ctx);
         let path = if save_as || self.document.path.is_none() {
             FileDialog::new()
@@ -457,7 +466,7 @@ impl Atelier {
             return true;
         }
         match MessageDialog::new().set_title("Unsaved garment")
-            .set_description("Save committed changes before continuing?\nUnfinished drawing/sewing drafts are not saved.\nYes: save · No: discard · Cancel: stay here.")
+            .set_description("Save committed changes before continuing?\nUnfinished drawing/sewing/measurement drafts are not saved.\nYes: save · No: discard · Cancel: stay here.")
             .set_buttons(MessageButtons::YesNoCancel).show() {
             MessageDialogResult::Yes => self.save_document(ctx, false),
             MessageDialogResult::No => true,

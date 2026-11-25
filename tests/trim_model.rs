@@ -712,6 +712,66 @@ fn repeat_trims_refuses_document_capacity_without_partial_write() {
 }
 
 #[test]
+fn trim_line_resolves_to_current_deformed_state_and_rejects_remesh() {
+    use marvelous_cloth::garment::GarmentTemplate;
+
+    let mut source = GarmentTemplate::two_panel_demo();
+    source.version = 2;
+    source.panels[0].polygon = Some(
+        marvelous_cloth::garment::shapes::primitive(
+            marvelous_cloth::garment::shapes::Primitive::Rectangle,
+            DVec2::new(0.4, 0.3),
+            0.,
+            Default::default(),
+        )
+        .unwrap(),
+    );
+    source.seams.clear();
+    source.panels[0].pins.clear();
+    source.trims.push(Trim {
+        id: "trim_line".into(),
+        panel_id: source.panels[0].id.clone(),
+        kind: TrimKind::Zipper {
+            path_m: vec![DVec2::new(0.05, 0.05), DVec2::new(0.35, 0.05)],
+            width_m: 0.012,
+        },
+    });
+    let garment = source.compile().unwrap();
+    let mut state = garment.initial_state.clone();
+    for x in &mut state.x {
+        x.z += 0.04;
+    }
+    let panel = &garment.panels[0];
+    assert!(panel.vertices.start < panel.vertices.end);
+    let first = garment
+        .embed_point(&source.panels[0].id, DVec2::new(0.05, 0.05))
+        .unwrap();
+    let last = garment
+        .embed_point(&source.panels[0].id, DVec2::new(0.35, 0.05))
+        .unwrap();
+    let a = first.evaluate(&state.x).unwrap();
+    let b = last.evaluate(&state.x).unwrap();
+    assert!(a.distance(b) > 0.2);
+
+    let mut remeshed_source = source.clone();
+    remeshed_source.panels[0].polygon = Some(
+        marvelous_cloth::garment::shapes::primitive(
+            marvelous_cloth::garment::shapes::Primitive::Rectangle,
+            DVec2::new(0.01, 0.01),
+            0.,
+            Default::default(),
+        )
+        .unwrap(),
+    );
+    let remeshed = remeshed_source.compile().unwrap();
+    assert!(
+        remeshed
+            .embed_point(&source.panels[0].id, DVec2::new(0.05, 0.05))
+            .is_err()
+    );
+}
+
+#[test]
 fn repeat_refuses_linked_panel_without_mutating_template() {
     use marvelous_cloth::{
         authoring::{self, Command},
